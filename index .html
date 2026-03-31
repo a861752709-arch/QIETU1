@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>嵩哥图片智能批量切分工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body class="bg-gray-900 text-gray-200 min-h-screen p-8 font-sans">
+    <div class="max-w-4xl mx-auto bg-gray-800 rounded-xl shadow-2xl p-8 border border-gray-700">
+        <h1 class="text-3xl font-bold mb-2 text-center text-blue-400">嵩哥图像网格批量切分工具</h1>
+        <p class="text-center text-gray-400 mb-8 text-sm">支持一次性上传多张图，自动分文件夹打包下载</p>
+        
+        <div class="mb-8">
+            <label class="flex flex-col items-center justify-center w-full h-40 border-2 border-gray-600 border-dashed rounded-lg cursor-pointer hover:bg-gray-700 transition relative overflow-hidden">
+                <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                    <svg class="w-10 h-10 mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                    <p class="mb-2 text-sm text-gray-400"><span class="font-semibold text-blue-400">点击上传</span> 或拖拽多张图片至此</p>
+                    <p class="text-xs text-gray-500">支持 PNG, JPG, WEBP</p>
+                </div>
+                <input id="imageUpload" type="file" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept="image/png, image/jpeg, image/webp" multiple />
+            </label>
+        </div>
+
+        <div class="grid grid-cols-2 gap-6 mb-8">
+            <div>
+                <label class="block text-sm font-medium text-gray-400 mb-2">行数 (Rows)</label>
+                <input type="number" id="rows" value="3" min="1" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-400 mb-2">列数 (Columns)</label>
+                <input type="number" id="cols" value="3" min="1" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+        </div>
+
+        <button id="processBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 shadow-lg cursor-not-allowed opacity-50 flex justify-center items-center" disabled>
+            <span id="btnText">开始批量切图并打包下载 (ZIP)</span>
+        </button>
+
+        <div id="previewArea" class="mt-10 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-gray-300 flex items-center justify-between">
+                <span>已读取的图片</span>
+                <span id="imageCount" class="text-sm bg-gray-700 px-3 py-1 rounded-full text-gray-400">0 张</span>
+            </h2>
+            <div id="previewGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                </div>
+        </div>
+    </div>
+
+    <script>
+        const imageUpload = document.getElementById('imageUpload');
+        const rowsInput = document.getElementById('rows');
+        const colsInput = document.getElementById('cols');
+        const processBtn = document.getElementById('processBtn');
+        const btnText = document.getElementById('btnText');
+        const previewArea = document.getElementById('previewArea');
+        const previewGrid = document.getElementById('previewGrid');
+        const imageCount = document.getElementById('imageCount');
+
+        // 用数组存储所有上传的图片对象
+        let currentImages = []; 
+
+        // 辅助函数：将文件读取为 Data URL
+        function readFileAsDataURL(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // 辅助函数：将 Data URL 加载为 Image 对象
+        function loadImage(src) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.src = src;
+            });
+        }
+
+        // 处理批量图片上传与预览
+        imageUpload.addEventListener('change', async function(e) {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            // 初始化状态
+            currentImages = [];
+            previewGrid.innerHTML = '';
+            previewArea.classList.remove('hidden');
+            
+            // 按钮变更加载状态
+            processBtn.disabled = true;
+            btnText.innerText = "正在读取图片...";
+
+            // 循环处理每一个文件
+            for (let file of files) {
+                const filename = file.name.replace(/\.[^/.]+$/, ""); // 去除后缀
+                const dataUrl = await readFileAsDataURL(file);
+                const img = await loadImage(dataUrl);
+
+                currentImages.push({ img, filename });
+
+                // 生成缩略图并加入网格
+                const imgEl = document.createElement('img');
+                imgEl.src = dataUrl;
+                // Tailwind 样式：等比缩放裁剪成正方形缩略图
+                imgEl.className = "w-full aspect-square object-cover rounded-lg shadow-md border border-gray-600 hover:border-blue-400 transition";
+                previewGrid.appendChild(imgEl);
+            }
+
+            // 更新 UI 状态
+            imageCount.innerText = `共 ${currentImages.length} 张`;
+            btnText.innerText = `处理 ${currentImages.length} 张图片并下载`;
+            processBtn.disabled = false;
+            processBtn.classList.remove('cursor-not-allowed', 'opacity-50');
+        });
+
+        // 核心：批量切图与文件夹归档逻辑
+        processBtn.addEventListener('click', async function() {
+            if (currentImages.length === 0) return;
+
+            const rows = parseInt(rowsInput.value);
+            const cols = parseInt(colsInput.value);
+            
+            // 改变按钮状态
+            btnText.innerText = "正在疯狂切图中，请稍候...";
+            processBtn.disabled = true;
+            processBtn.classList.add('cursor-not-allowed', 'opacity-50');
+
+            const zip = new JSZip();
+
+            // 离屏 Canvas，用于复用
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+            // 遍历所有图片
+            for (let item of currentImages) {
+                const { img, filename } = item;
+                const sliceWidth = img.width / cols;
+                const sliceHeight = img.height / rows;
+
+                canvas.width = sliceWidth;
+                canvas.height = sliceHeight;
+
+                // 【核心优化】如果有多张图，在 ZIP 里为每张图建一个同名文件夹
+                const targetFolder = currentImages.length > 1 ? zip.folder(filename) : zip;
+
+                let count = 1;
+
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(
+                            img, 
+                            c * sliceWidth, r * sliceHeight, sliceWidth, sliceHeight, 
+                            0, 0, sliceWidth, sliceHeight
+                        );
+
+                        // 转换并存入对应文件夹
+                        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                        const formattedCount = count.toString().padStart(2, '0');
+                        targetFolder.file(`${filename}_${formattedCount}.png`, blob);
+                        count++;
+                    }
+                }
+            }
+
+            // 生成最终的 ZIP 文件
+            zip.generateAsync({type:"blob"}).then(function(content) {
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(content);
+                link.download = `批量切图_${rows}x${cols}_共${currentImages.length}项.zip`;
+                link.click();
+                
+                // 恢复按钮状态
+                btnText.innerText = `处理 ${currentImages.length} 张图片并下载`;
+                processBtn.disabled = false;
+                processBtn.classList.remove('cursor-not-allowed', 'opacity-50');
+            });
+        });
+    </script>
+</body>
+</html>
